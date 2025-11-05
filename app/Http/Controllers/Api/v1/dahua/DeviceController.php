@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Crypt;
+
 class DeviceController extends Controller
 {
     function handleEvent($topic)
@@ -22,13 +23,19 @@ class DeviceController extends Controller
         $topic_json = json_encode($topic);
 
         // Find the camera first to use its ID for logging
+
+
+
+
         try {
             $cameraResponse = Http::get($apiServer . '/api/v1/dahua-cameras', [
                 'channel_id' => $channel_id
             ]);
 
             if ($cameraResponse->successful()) {
-                $dahuaCamera = collect($cameraResponse->json()['data'])->first();
+                Log::info("Event logged to SystemLog for channel Success: " . $cameraResponse);
+                $dahuaCamera = collect($cameraResponse->json()['data']);
+                // Log::info("Event logged to SystemLog for channel Success 2: " . $dahuaCamera);
             } else {
                 Log::error("Failed to fetch DahuaCamera: " . $cameraResponse->body());
                 $dahuaCamera = null;
@@ -38,37 +45,75 @@ class DeviceController extends Controller
             $dahuaCamera = null;
         }
 
-        // Store the complete JSON message in SystemLog
-        try {
-            $logResponse = Http::post($apiServer . '/api/v1/system-logs', [
-                'system_logable_id'   => $dahuaCamera ? $dahuaCamera['id'] : $eventId,
-                'system_logable_type' => 'App\Models\DahuaCamera',
-                'module_name'         => 'MQTT_LISTENER',
-                'action'              => 'VEHICLE_CAPTURE_EVENT',
-                'new_value'           => $topic_json,
-                'ip_address'          => request()->ip() ?? 'MQTT_LISTENER',
-                'guard_name'          => 'api'
-            ]);
 
-            if ($logResponse->successful()) {
-                Log::info("Event logged to SystemLog for channel: " . $channel_id);
-            } else {
-                Log::error("Failed to log event via API: " . $logResponse->body());
-            }
-        } catch (\Exception $e) {
-            Log::error("Error sending log to API: " . $e->getMessage());
-        }
 
         Log::info("Camera info: " . $dahuaCamera);
 
-        if (isset($dahuaCamera)) {
-            Log::info("Processing door open for camera: " . $dahuaCamera);
+        if ($dahuaCamera->isNotEmpty()) {
+            // Store the complete JSON message in SystemLog
+            try {
+                $logResponse = Http::post($apiServer . '/api/v1/system-logs', [
+                    'system_logable_id'   =>  $eventId,
+                    'system_logable_type' => 'App\Models\DahuaCamera',
+                    'module_name'         => 'MQTT_LISTENER',
+                    'action'              => 'VEHICLE_CAPTURE_EVENT',
+                    'new_value'           => $topic_json,
+                    'ip_address'          => request()->ip() ?? 'MQTT_LISTENER',
+                    'guard_name'          => 'api'
+                ]);
 
-            $client = $dahuaCamera['client'];
-            $dahua_server = $dahuaCamera['server'];
-            $password = Crypt::decrypt($dahua_server['password']);
-            // Uncomment if you want to open the door
-            // $result = $this->openDoor($dahua_server['url'], $dahua_server['username'], $password, $channel_id);
+                if ($logResponse->successful()) {
+                    Log::info("Event logged to SystemLog for channel: " . $channel_id);
+                } else {
+                    Log::error("Failed to log event via API: " . $logResponse->body());
+                }
+            } catch (\Exception $e) {
+                Log::error("Error sending log to API: " . $e->getMessage());
+            }
+
+            $dahua_server_id = $dahuaCamera['server_id'];
+
+
+
+            try {
+                $response = Http::get($apiServer . '/api/v1/dahua-servers');
+
+                if ($response->successful()) {
+                    $dahuaServers = $response->json()['data'];
+                    Log::info("Fetched Dahua servers successfully: " . json_encode($dahuaServers));
+                } else {
+                    Log::error('Failed to fetch Dahua servers: ' . $response->body());
+                    return [];
+                }
+            } catch (\Exception $e) {
+                Log::error('Error while calling API: ' . $e->getMessage());
+                return [];
+            }
+
+
+
+            $servers = [];
+
+            $password = null;
+            $url = null;
+            $username = null;
+            foreach ($dahuaServers as $server) {
+                if ($server['id'] == $dahua_server_id) {
+                    Log::info("Server details:");
+                    Log::info("URL: " . $server['url']);
+                    Log::info("Username: " . $server['username']);
+                    Log::info("Password: " . $server['password']);
+                    $username = $server['username'];
+                    $url = $server['url'];
+                    $password = $server['password'];
+                    Log::info("Found Dahua server: " . json_encode($server));
+                    Log::info("Processing door open for camera: " . json_encode($server));
+                }
+            }
+
+
+
+            // $result = $this->openDoor($url, $username, $password, $channel_id);
         }
     }
 
@@ -77,9 +122,16 @@ class DeviceController extends Controller
 
         // Instantiate the AuthController
         $authController = new AuthController();
+        try {
 
+            $decryptedPassword = Crypt::decryptString($password);
+        } catch (\Exception $e) {
+
+            return false;
+        }
+        Log::info("Password: " . $decryptedPassword);
         // Call the method from AuthController
-        $authResponse = $authController->authorizeAccount($url, $username, $password);
+        $authResponse = $authController->authorizeAccount($url, $username, $decryptedPassword);
 
 
 
