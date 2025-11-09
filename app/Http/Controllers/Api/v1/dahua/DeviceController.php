@@ -12,7 +12,7 @@ class DeviceController extends Controller
 {
     function handleEvent($topic)
     {
-        $apiServer = env('API_SERVER_URL');
+        $apiServer = config('app.API_SERVER_URL');
 
         // Extract data from the topic
         $eventId = $topic['id'];
@@ -28,7 +28,7 @@ class DeviceController extends Controller
 
 
         try {
-            $cameraResponse = Http::get($apiServer . '/api/v1/dahua-cameras', [
+            $cameraResponse = Http::withoutVerifying()->get($apiServer . '/api/v1/dahua-cameras', [
                 'channel_id' => $channel_id
             ]);
 
@@ -52,7 +52,7 @@ class DeviceController extends Controller
         if ($dahuaCamera->isNotEmpty()) {
             // Store the complete JSON message in SystemLog
             try {
-                $logResponse = Http::post($apiServer . '/api/v1/system-logs', [
+                $logResponse = Http::withoutVerifying()->post($apiServer . '/api/v1/system-logs', [
                     'system_logable_id'   =>  $eventId,
                     'system_logable_type' => 'App\Models\DahuaCamera',
                     'module_name'         => 'MQTT_LISTENER',
@@ -76,7 +76,7 @@ class DeviceController extends Controller
 
 
             try {
-                $response = Http::get($apiServer . '/api/v1/dahua-servers');
+                $response = Http::withoutVerifying()->get($apiServer . '/api/v1/dahua-servers');
 
                 if ($response->successful()) {
                     $dahuaServers = $response->json()['data'];
@@ -113,7 +113,7 @@ class DeviceController extends Controller
 
 
 
-            // $result = $this->openDoor($url, $username, $password, $channel_id);
+             $result = $this->openDoor($url, $username, $password, $channel_id);
         }
     }
 

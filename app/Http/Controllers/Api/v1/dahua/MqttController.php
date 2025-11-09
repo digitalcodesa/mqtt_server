@@ -28,10 +28,12 @@ class MqttController extends Controller
 
         $authController = new AuthController();
 
-        $apiServer = env('API_SERVER_URL');
+        $apiServer = config('app.API_SERVER_URL');
+        // $apiServer = 'https://test.barriersolutions.co';
+        Log::info($apiServer);
 
         try {
-            $response = Http::get($apiServer . '/api/v1/dahua-servers');
+            $response = Http::withoutVerifying()->get($apiServer . '/api/v1/dahua-servers');
 
             if ($response->successful()) {
                 $dahuaServers = $response->json()['data'];
@@ -90,7 +92,7 @@ class MqttController extends Controller
                 $mqttPort = isset($mqttParts[1]) ? (int)$mqttParts[1] : 1883; // 1883
 
                 // try {
-                //     $compoundResponse = Http::get($apiServer . '/api/v1/compounds', [
+                //     $compoundResponse = Http::withoutVerifying()->get($apiServer . '/api/v1/compounds', [
                 //         'dahua_server_id' => $server['id']
                 //     ]);
 
@@ -128,6 +130,7 @@ class MqttController extends Controller
     {
 
         $servers = $this->getServersData();
+        
         // Validate servers array structure
         if (!is_array($servers) || empty($servers)) {
             return [
