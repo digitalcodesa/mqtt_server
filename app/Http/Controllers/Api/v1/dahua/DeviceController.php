@@ -134,6 +134,14 @@ class DeviceController extends Controller
         $authResponse = $authController->authorizeAccount($url, $username, $decryptedPassword);
 
 
+        Log::info("Auth Response: " . json_encode($authResponse));
+           if (!isset($authResponse['token'])) {
+            Log::error("Token not found in auth response. Keys: " . implode(', ', array_keys($authResponse)));
+            return false;
+        }
+
+        $token = $authResponse['token'];
+        Log::info("Token extracted successfully: " . $token . "...");
 
         // Base API URL
         $baseUrl = "{$url}/ipms/api/v1.0/entrance/channel/remote-open-sluice/$channel_id";
@@ -153,13 +161,13 @@ class DeviceController extends Controller
             $response = Http::withHeaders([
                 'Accept-Language' => 'en',
                 'Content-Type' => 'application/json;charset=UTF-8',
-                'X-Subject-Token' => $authResponse['token'],
+                'X-Subject-Token' =>  $token,
             ])->withOptions(['verify' => false])->put($baseUrl, $body);
 
             if ($response->successful()) {
-                Log::info('Door open success - Status: ' . $response->json());
+                Log::info('Door open success - Status: ' );
 
-                Log::info($response->json());
+                // Log::info($response->json());
 
                 return true;
             } else {
