@@ -113,7 +113,7 @@ class DeviceController extends Controller
 
 
 
-             $result = $this->openDoor($url, $username, $password, $channel_id);
+            $result = $this->openDoor($url, $username, $password, $channel_id);
         }
     }
 
@@ -157,6 +157,8 @@ class DeviceController extends Controller
             ])->withOptions(['verify' => false])->put($baseUrl, $body);
 
             if ($response->successful()) {
+                Log::info('Door open success - Status: ' . $response->json());
+
                 Log::info($response->json());
 
                 return true;
