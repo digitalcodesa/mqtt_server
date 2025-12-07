@@ -1,59 +1,161 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# MQTT Server for Dahua Devices
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Overview
 
-## About Laravel
+This project is a Laravel-based middleware designed to integrate with Dahua devices (Cameras, NVRs, etc.). It acts as a bridge that:
+1.  **Authenticates** with Dahua devices using a custom secure handshake.
+2.  **Retrieves MQTT Configurations** directly from the devices.
+3.  **Listens for MQTT Events**, specifically vehicle capture events (`ipms.entrance.notifyVehicleCaptureInfo`).
+4.  **Forwards Events** to a central API server for logging and processing.
+5.  **Controls Devices**, such as sending remote "Open Door" (Open Sluice) commands.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+It supports managing multiple device listeners simultaneously using background jobs and Redis for state management.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+*   **Automated Dahua Auth**: Handles the complex multi-step authentication (Digest/RSA/AES) required by Dahua devices.
+*   **Dynamic MQTT Setup**: Fetches MQTT credentials and connection details dynamically from the device.
+*   **Event Forwarding**: Captures vehicle plate numbers and images, forwarding them to a central system log.
+*   **Remote Control**: API endpoint to trigger gate/door opening on specific channels.
+*   **Scalable Listeners**: Uses Laravel Queues to run multiple MQTT listeners in the background.
+*   **Status Monitoring**: API to check the status of active listeners.
 
-## Learning Laravel
+## Prerequisites
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+*   **PHP**: ^8.2
+*   **Laravel**: ^12.0
+*   **Composer**
+*   **Database**: SQLite/MySQL (for Laravel Jobs table if using database queue).
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Installation
 
-## Laravel Sponsors
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd mqtt_server
+    ```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+2.  **Install Dependencies:**
+    ```bash
+    composer install
+    npm install
+    ```
 
-### Premium Partners
+3.  **Environment Configuration:**
+    Copy the example environment file:
+    ```bash
+    cp .env.example .env
+    ```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+    Update `.env` with your configuration. **Crucially**, you must add the `API_SERVER_URL` which points to your central API backend:
+    ```env
+    API_SERVER_URL=https://your-central-api-server.com
+    
 
-## Contributing
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+    # Configure Queue (Recommended to use Redis or Database)
+    QUEUE_CONNECTION=database
+    ```
 
-## Code of Conduct
+4.  **Generate Application Key:**
+    ```bash
+    php artisan key:generate
+    ```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+5.  **Run Migrations:**
+    (Required for the `jobs` table if using `QUEUE_CONNECTION=database`)
+    ```bash
+    php artisan migrate
+    ```
 
-## Security Vulnerabilities
+## Running the Server
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Since this application relies on long-running MQTT listeners processed as background jobs, you **must** run a queue worker.
 
-## License
+1.  **Start the Queue Worker:**
+    ```bash
+    php artisan queue:work --timeout=0
+    ```
+    *Note: `--timeout=0` is important because MQTT listeners are long-running processes.*
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+2.  **Start the Listeners (Command Line):**
+    You can start the listeners using the custom artisan command:
+    ```bash
+    php artisan alarms:listen
+    ```
+
+3.  **Start the Development Server (Optional for API access):**
+    ```bash
+    php artisan serve
+    ```
+
+## Usage / API Documentation
+
+The application exposes several API endpoints to manage the MQTT listeners.
+
+### Base URL: `/api/v1/mqtt`
+
+#### 1. Start Multiple Listeners
+Fetches all available Dahua servers from the central API, authenticates with them, and starts background MQTT listeners for each.
+
+*   **Endpoint:** `POST /start-multiple-listeners`
+*   **Response:**
+    ```json
+    {
+        "status": "success",
+        "message": "Started X listeners, Y failed",
+        "results": [...]
+    }
+    ```
+
+#### 2. Get Listeners Status
+Returns the status of all currently active MQTT listeners (cached in Redis).
+
+*   **Endpoint:** `GET /listeners-status`
+*   **Response:**
+    ```json
+    {
+        "status": "success",
+        "active_listeners": 5,
+        "listeners": [
+            {
+                "server": "192.168.1.100",
+                "status": "active",
+                "started_at": "..."
+            }
+        ]
+    }
+    ```
+
+#### 3. Stop All Listeners
+Sends a signal to stop all running MQTT listener jobs.
+
+*   **Endpoint:** `POST /stop-all-listeners`
+
+#### 4. Start Single Listener (Job)
+Manually start a listener for a specific device as a background job.
+
+*   **Endpoint:** `POST /start-listener-job`
+*   **Body:**
+    ```json
+    {
+        "server": "192.168.1.100",
+        "port": 1883,
+        "clientId": "client_1",
+        "username": "admin",
+        "password": "password",
+        "topic": "mq/common/msg/topic"
+    }
+    ```
+
+## Project Structure
+
+The core logic is located in `app/Http/Controllers/Api/v1/dahua`:
+
+*   **`AuthController.php`**: Handles the handshake with Dahua devices (Step 1 & 2 Auth, RSA key generation, AES decryption of passwords).
+*   **`DeviceController.php`**: Contains the business logic for handling incoming MQTT messages (`handleEvent`) and sending commands (`openDoor`).
+*   **`MqttController.php`**: Manages the lifecycle of listeners (start/stop/status) and interacts with the `MqttService`.
+
+**Services & Jobs:**
+*   **`App\Services\MqttService`**: Wraps the `php-mqtt/client` to establish connections and subscribe to topics.
+*   **`App\Jobs\StartMqttListenerJob`**: The queueable job that keeps the MQTT connection alive in the background.

@@ -107,13 +107,13 @@ class DeviceController extends Controller
                     $url = $server['url'];
                     $password = $server['password'];
                     Log::info("Found Dahua server: " . json_encode($server));
-                    Log::info("Processing door open for camera: " . json_encode($server));
+                    // Log::info("Processing door open for camera: " . json_encode($server));
                 }
             }
 
 
-
-            $result = $this->openDoor($url, $username, $password, $channel_id);
+            // Commented for now
+            // $result = $this->openDoor($url, $username, $password, $channel_id);
         }
     }
 
@@ -129,7 +129,7 @@ class DeviceController extends Controller
 
             return false;
         }
-        Log::info("Password: " . $decryptedPassword);
+        // Log::info("Password: " . $decryptedPassword);
         // Call the method from AuthController
         $authResponse = $authController->authorizeAccount($url, $username, $decryptedPassword);
 
